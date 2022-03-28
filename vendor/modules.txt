@@ -44,7 +44,7 @@ github.com/urfave/cli
 # github.com/xtaci/kcp-go/v5 v5.6.1
 ## explicit
 github.com/xtaci/kcp-go/v5
-# github.com/xtaci/serialpacket v0.1.0
+# github.com/xtaci/serialpacket v0.1.1
 ## explicit
 github.com/xtaci/serialpacket
 # github.com/xtaci/smux v1.5.16
