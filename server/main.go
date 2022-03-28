@@ -10,14 +10,17 @@ import (
 	"net/http"
 	_ "net/http/pprof"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/crypto/pbkdf2"
 
+	"github.com/tarm/serial"
 	"github.com/urfave/cli"
 	kcp "github.com/xtaci/kcp-go/v5"
 	"github.com/xtaci/kcptun/generic"
+	"github.com/xtaci/serialpacket"
 	"github.com/xtaci/smux"
 	"github.com/xtaci/tcpraw"
 )
@@ -430,22 +433,41 @@ func main() {
 			}
 		}
 
-		if config.TCP { // tcp dual stack
-			if conn, err := tcpraw.Listen("tcp", config.Listen); err == nil {
-				lis, err := kcp.ServeConn(block, config.DataShard, config.ParityShard, conn)
-				checkError(err)
-				wg.Add(1)
-				go loop(lis)
-			} else {
-				log.Println(err)
-			}
+		var listener *kcp.Listener
+		if strings.HasPrefix(config.Listen, generic.SERIAL_PROTO) {
+			c, err := generic.ParseSerialParams(config.Listen)
+			checkError(err)
+			// open serial
+			s, err := serial.OpenPort(c)
+			checkError(err)
+
+			// wrapp to net.PacketConn
+			serialConn, err := serialpacket.NewConn(s)
+			checkError(err)
+
+			// kcp conn over serial
+			lis, err := kcp.ServeConn(block, config.DataShard, config.ParityShard, serialConn)
+			checkError(err)
+			listener = lis
+
+		} else if config.TCP { // tcp dual stack
+			conn, err := tcpraw.Listen("tcp", config.Listen)
+			checkError(err)
+
+			lis, err := kcp.ServeConn(block, config.DataShard, config.ParityShard, conn)
+			checkError(err)
+
+			listener = lis
+		} else {
+			// udp stack
+			lis, err := kcp.ListenWithOptions(config.Listen, block, config.DataShard, config.ParityShard)
+			checkError(err)
+
+			listener = lis
 		}
 
-		// udp stack
-		lis, err := kcp.ListenWithOptions(config.Listen, block, config.DataShard, config.ParityShard)
-		checkError(err)
 		wg.Add(1)
-		go loop(lis)
+		go loop(listener)
 		wg.Wait()
 		return nil
 	}
